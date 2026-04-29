@@ -11,7 +11,7 @@ AI 自治认知记忆系统 —— OpenCode 插件。
 - **AI 完全自治**：AI 自己决定记什么、怎么记、怎么改、怎么忘
 - **认知分层**：客观知识 → 主观理解 → 实时上下文，三层自主管理
 - **阅读即生成**：Memory.md 不是被"检索"的，而是被"阅读"的——每次阅读都带着当前心境生成新的理解
-- **跨 Compact 备份**：对话被压缩后，Scratchpad 保留你的心境记录，避免失忆后硬撑
+- **Pre-Compact 归档**：上下文压缩前自动触发归档 hook，在工具可用窗口内将关键理解持久化到 Memory.md，避免压缩导致认知丢失
 
 ---
 
@@ -82,13 +82,16 @@ Session 开始:
   6. 随时用 scratch_write 记录 lightweight 笔记（1-3 句话）
   7. 遇到新信息 → 判断是否需要更新 Memory.md
 
-Compact 前:
-  8. 系统提醒：context 即将被压缩
-  9. AI 快速追加：把最近最重要的理解写入 Scratchpad
-  10. 自动 compact 时不归档（时间宝贵）
+Pre-Compact（压缩前）:
+  8. `experimental.session.pre-compact` hook 触发
+  9. 用户主动 `/compact` → 完整归档关键理解到 Memory.md（完整工具访问）
+  10. 自动 compact → 快速抢救 1-2 项最关键理解到 Memory.md
+
+Compact 后:
+  11. 系统生成摘要，AI 基于已归档内容恢复工作
 
 Session 结束:
-  11. AI 归档：把 Scratchpad 理解选择性写入 Memory.md
+  12. AI 确认：所有重要理解已归档到 Memory.md
 ```
 
 ---

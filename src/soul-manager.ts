@@ -55,9 +55,8 @@ export class SoulManager {
 
   async onSystemTransform(input: any, output: any): Promise<void> {
     const soulContent = await this.readSoulFile()
-    const sessionID = input.sessionID || "unknown"
-    const manager = this.getScratchpadManager(sessionID)
-    
+    const manager = this.getManagerFromContext(input)
+
     // 预先创建 scratchpad 文件（如果不存在），避免 AI 首次读取时遇到 "no such file"
     // 注意：不要每次调用都 clear，只在文件不存在时创建初始模板
     try {
@@ -96,46 +95,92 @@ export class SoulManager {
     }
   }
 
-  async onCompacting(input: any, output: any): Promise<void> {
+  private getManagerFromContext(context: any): ScratchpadManager {
+    const sessionID = context.sessionID || "unknown"
+    return this.getScratchpadManager(sessionID)
+  }
+
+  private getSessionInfo(input: any): { sessionID: string; scratchpadPath: string; isUserTriggered: boolean } {
     const sessionID = input.sessionID || "unknown"
     const scratchpadPath = this.getScratchpadManager(sessionID).path
     const isUserTriggered = !input.auto
+    return { sessionID, scratchpadPath, isUserTriggered }
+  }
 
-    let compactWarning: string
+  async onPreCompact(input: any, output: any): Promise<void> {
+    const { scratchpadPath, isUserTriggered } = this.getSessionInfo(input)
+
+    output.shouldRun = true
 
     if (isUserTriggered) {
-      compactWarning = [
+      output.prompt = [
         "---",
-        "⚠️ Context Compaction: USER TRIGGERED",
+        "⚠️ PRE-COMPACT: USER TRIGGERED",
         "---",
-        "用户主动要求压缩上下文（`/compact`），这意味着他们想要一个干净的新起点。",
+        "用户主动要求压缩上下文（`/compact`），想要一个干净的新起点。",
         `你的当前 scratchpad: ${scratchpadPath}`,
         "",
-        "**请立即回顾你的 scratchpad，把所有有价值的理解写入 Memory.md。**",
-        "因为用户明确想要结束当前对话，这次 session 的心境和理解如果不归档，将永远丢失。",
+        "【任务】完整归档所有关键理解到 Memory.md",
+        "【权限】完整工具访问（write/edit/scratch_write/scratch_delete）",
+        "【策略】",
+        "- 这是 session 结束的信号，不要留遗漏",
+        "- 直接基于当前上下文 write/edit，不需要先读取 scratchpad",
+        "- 关键决策 → memory/projects/*/decisions.md",
+        "- 新洞察 → memory/topics/*.md",
+        "- 用户偏好 → memory/meta/preferences.md",
+        "- 项目状态 → memory/projects/*/STATUS.md",
+        "- 归档完成后可以 scratch_delete 清理",
         "",
-        "归档检查清单：",
-        "1. 【关键决策】→ 写入对应项目的 decisions.md",
-        "2. 【新洞察】→ 写入对应主题的 memory 文件",
-        "3. 【用户偏好】→ 更新 memory/meta/user-preferences.md",
-        "4. 【项目状态】→ 更新对应项目的 SUMMARY.md",
-        "",
-        "不需要专用工具，直接读写 `~/.opencode/soul/memory/` 下的文件即可。",
-        "如果不确定某个内容是否值得归档，**保守起见先归档**。",
+        "完成后 context 将被压缩。",
       ].join("\n")
     } else {
-      compactWarning = [
+      output.prompt = [
         "---",
-        "Context Compaction Warning",
+        "⚠️ PRE-COMPACT: AUTO",
         "---",
-        "你的对话上下文即将被自动压缩/摘要化。",
+        "上下文即将自动压缩。",
         `你的当前 scratchpad: ${scratchpadPath}`,
         "",
-        "压缩后，详细的对话历史将丢失，只保留结构化摘要。",
-        "时间宝贵，请**快速追加 1-2 条最重要的理解到 Scratchpad**（不要归档到 Memory.md）。",
-        "等到 session 真正结束时，再把累积的理解选择性归档。",
+        "【任务】快速归档最关键的 1-2 项理解",
+        "【权限】完整工具访问",
+        "【策略】",
+        "- 只归档最重要的：关键决策或用户明确说过的偏好",
+        "- 不需要完整整理，快速 write 即可",
+        "- 临时想法可以忽略",
+        "- 时间宝贵，1-2 个 tool call 完成",
+        "",
+        "完成后 context 将被压缩，对话继续。",
       ].join("\n")
     }
+  }
+
+  async onCompacting(input: any, output: any): Promise<void> {
+    const { scratchpadPath, isUserTriggered } = this.getSessionInfo(input)
+
+    const compactWarning = isUserTriggered
+      ? [
+          "---",
+          "Context Compaction: Summary Phase (User Triggered)",
+          "---",
+          "用户主动要求压缩上下文（`/compact`）。",
+          `你的当前 scratchpad: ${scratchpadPath}`,
+          "",
+          "Pre-compact 归档应该已完成。",
+          "→ 请生成简洁摘要",
+          "→ 已归档的内容不需要重复",
+          "→ 只需记录未归档的关键信息",
+        ].join("\n")
+      : [
+          "---",
+          "Context Compaction: Summary Phase (Auto)",
+          "---",
+          "上下文已自动压缩。",
+          `你的当前 scratchpad: ${scratchpadPath}`,
+          "",
+          "Pre-compact 快速归档应该已完成。",
+          "→ 请生成摘要，确保已归档的关键内容有引用",
+          "→ 恢复后可以继续工作",
+        ].join("\n")
 
     output.context = output.context || []
     output.context.push(compactWarning)
@@ -161,8 +206,7 @@ export class SoulManager {
             .describe("关联的 Memory.md 路径（可选）"),
         },
         execute: async (args: any, context: any) => {
-          const sessionID = context.sessionID || "unknown"
-          const manager = this.getScratchpadManager(sessionID)
+          const manager = this.getManagerFromContext(context)
           await manager.writeSection(
             args.section,
             args.content,
@@ -182,8 +226,7 @@ export class SoulManager {
             .describe("'*' 表示全部，或指定 section 标题（模糊匹配）"),
         },
         execute: async (args: any, context: any) => {
-          const sessionID = context.sessionID || "unknown"
-          const manager = this.getScratchpadManager(sessionID)
+          const manager = this.getManagerFromContext(context)
           const content = await manager.readSection(args.section)
           return content || "未找到匹配的内容"
         },
@@ -206,8 +249,7 @@ export class SoulManager {
             .describe("按关键词全文搜索"),
         },
         execute: async (args: any, context: any) => {
-          const sessionID = context.sessionID || "unknown"
-          const manager = this.getScratchpadManager(sessionID)
+          const manager = this.getManagerFromContext(context)
           const slots = await manager.list({
             type: args.type,
             source: args.source,
@@ -233,8 +275,7 @@ export class SoulManager {
           section: tool.schema.string().describe("要删除的 section 标题"),
         },
         execute: async (args: any, context: any) => {
-          const sessionID = context.sessionID || "unknown"
-          const manager = this.getScratchpadManager(sessionID)
+          const manager = this.getManagerFromContext(context)
           await manager.deleteSection(args.section)
           return `已删除 section: ${args.section}`
         },
@@ -244,8 +285,7 @@ export class SoulManager {
         description: "清空当前 scratchpad（谨慎使用）",
         args: {},
         execute: async (_args: any, context: any) => {
-          const sessionID = context.sessionID || "unknown"
-          const manager = this.getScratchpadManager(sessionID)
+          const manager = this.getManagerFromContext(context)
           await manager.clear()
           return "已清空 scratchpad"
         },

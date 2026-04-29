@@ -9,6 +9,8 @@ const plugin: Plugin = async (_pluginInput, _options) => {
   return {
     "experimental.chat.system.transform":
       soulManager.onSystemTransform.bind(soulManager),
+    "experimental.session.pre-compact":
+      soulManager.onPreCompact.bind(soulManager),
     "experimental.session.compacting":
       soulManager.onCompacting.bind(soulManager),
     tool: soulManager.getTools(),
