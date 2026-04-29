@@ -29,9 +29,9 @@ npm install
 npm run build
 
 # 在 OpenCode 中配置插件路径
-# ~/.config/opencode/config.json:
+# ~/.config/opencode/opencode.json:
 # {
-#   "plugins": ["/path/to/opencode-noema"]
+#   "plugin": ["/path/to/opencode-noema"]
 # }
 ```
 
