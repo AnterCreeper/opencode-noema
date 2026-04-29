@@ -81,17 +81,17 @@ Post-Compact (session 继续):
   14. 继续随时用 scratch_write 记录笔记
 
 Pre-Compact (OpenCode 触发，唯一归档时机):
-  8. 系统提醒：context 即将被压缩/摘要化
-  9. AI 分流整理：
+  15. 系统提醒：context 即将被压缩/摘要化
+  16. AI 分流整理：
      - 热数据（活跃 insight、todo、未完成思路）→ Scratchpad（用 scratch_write 追加）
      - 冷数据（已验证决策、结构化知识、客观事实）→ Memory.md（直接 write/edit）
-  10. 已归档的冷数据可以从 scratchpad 删除（scratch_delete）
-  11. 系统执行：Compact/Prune，丢弃详细对话历史
+  17. 已归档的冷数据可以从 scratchpad 删除（scratch_delete）
+  18. 系统执行：Compact/Prune，丢弃详细对话历史
 
 Post-Compact (session 继续):
-  12. AI 读取 Scratchpad：详细对话已丢失，读回自己的"心境记录"
-  13. AI 继续工作：带着之前的理解继续任务
-  14. 继续随时用 scratch_write 记录笔记
+  19. AI 读取 Scratchpad：详细对话已丢失，读回自己的"心境记录"
+  20. AI 继续工作：带着之前的理解继续任务
+  21. 继续随时用 scratch_write 记录笔记
 ```
 
 ### 2.3 Compact 摘要 vs Scratchpad：骨架与血肉
@@ -206,7 +206,7 @@ OpenCode 生态中有三个系统在不同层面管理 Context，彼此不冲突
 |------|---------|------|----------|
 | **ACP** (opencode-agent-context-pruning) | 工具输出（ToolPart） | Prune（裁剪） | 工具输出 token > 40K；用户用 `/dcp sweep` |
 | **OpenCode 原生** | 对话消息（Message） | Compact（摘要） | Token ≥ (input_limit - reserved)；用户用 `/compact` |
-| **Soul Memory** (我们) | AI 的理解（Comprehension） | Archive（归档） | `experimental.session.compacting` hook |
+| **Soul Memory** (我们) | AI 的理解（Comprehension） | Post-Compact Recovery（恢复） | `experimental.session.compacting` hook |
 
 **协作关系**：
 1. **ACP** 清理旧工具输出 → 减小工具层体积
@@ -241,14 +241,30 @@ OpenCode 有两种 Compact 触发方式：
 
 ```typescript
 async onPreCompact(input, output) {
-  const isUserTriggered = !input.auto;
+  const { scratchpadPath, isUserTriggered } = this.getSessionInfo(input);
+
   output.shouldRun = true;
-  
-  if (isUserTriggered) {
-    output.prompt = userTriggeredPreCompactPrompt;
-  } else {
-    output.prompt = autoPreCompactPrompt;
-  }
+
+  const basePrompt = [
+    '---',
+    isUserTriggered ? '⚠️ PRE-COMPACT: USER TRIGGERED' : '⚠️ PRE-COMPACT: AUTO',
+    '---',
+    '上下文即将压缩。详细对话历史将丢失。',
+    `当前 scratchpad: ${scratchpadPath}`,
+    '',
+    '【唯一归档时机】压缩后无法补救。立即分流：',
+    '- 热数据（活跃思路、待办、未完成假设）→ scratch_write 追加到 scratchpad',
+    '- 冷数据（已验证决策、项目知识、用户偏好）→ 直接 write/edit 到 memory/',
+    '',
+    '原理：Scratchpad 保留主观理解（认知备份），Memory 沉淀客观知识。',
+    'compact 后对话丢失，但 scratchpad 和 memory 文件保留，确保认知延续。',
+    '',
+    isUserTriggered
+      ? '用户主动要求 clean start → 完整归档，不要遗漏任何理解。'
+      : '自动触发 → 优先保留热数据，限制 1-2 个 tool call。',
+  ].join('\n');
+
+  output.prompt = basePrompt;
 }
 ```
 
@@ -256,7 +272,7 @@ async onPreCompact(input, output) {
 - **Pre-compact 是唯一归档时机**：一旦 compact 完成，详细对话丢失，没有第二次机会
 - **自动 compact 时快速处理**：优先保留热数据到 Scratchpad，冷数据选择性写入 Memory.md
 - **用户主动 compact 时完整归档**：用户明确想要"干净起点"，不应遗漏
-- **onCompacting 降级为辅助**：在原 hook 中提醒 AI"pre-compact 应该已完成"，作为备份机制
+- **onCompacting 负责恢复**：在 compact 完成后提醒 AI 读取 Scratchpad，找回被压缩掉的认知
 
 ### 3.3 与 opencode-rules 的区别
 
@@ -683,13 +699,11 @@ export default async function plugin(input: PluginInput, options?: PluginOptions
 ### 6.2 `experimental.chat.system.transform` — 注入 SOUL.md + 初始化引导
 
 ```typescript
-async onSystemTransform(input, output) {
+  async onSystemTransform(input, output) {
   const soulContent = await this.readSoulFile();
-  const sessionID = input.sessionID || "unknown";
-  const manager = this.getScratchpadManager(sessionID);
+  const manager = this.getManagerFromContext(input);
   
-  // 预先创建空 scratchpad 文件（如果不存在），避免 AI 首次读取时遇到 "no such file"
-  // 注意：不要每次调用都 clear，只在文件不存在时创建初始模板
+  // 预先创建空 scratchpad 文件（如果不存在）
   try {
     await fs.access(manager.path);
   } catch {
@@ -703,18 +717,11 @@ async onSystemTransform(input, output) {
     '',
     '## Memory System',
     '',
-    '### 客观知识层（Memory.md）',
-    '长期知识存储在 `~/.opencode/soul/memory/`。',
-    '直接读写文件即可。链接格式由你自行约定。',
+    `Scratchpad: ${scratchpadPath}`,
+    'Memory: ~/.opencode/soul/memory/',
     '',
-    '### 理解层（Scratchpad）',
-    `当前 session 的 scratchpad: ${scratchpadPath}`,
-    '使用 `scratch_write` 记录你对 Memory.md 的阅读理解。',
-    '**关键：不要复制原文，写下"这次阅读对你当前任务的意义"**。',
-    '',
-    '### 归档',
-    '不需要专用工具，直接读写 `~/.opencode/soul/memory/` 即可。',
-    'Session 结束前，特别是收到 compact 提醒时，请把有价值的理解写入 Memory.md。',
+    '使用 scratch_* 工具写理解，直接读写文件归档。',
+    '不要复制原文，写"这次阅读对我当前任务的意义"。',
   ].join('\n');
 
   // 追加到 system prompt
@@ -728,61 +735,48 @@ async onSystemTransform(input, output) {
 }
 ```
 
-### 6.3 `experimental.session.compacting` — 分级提醒
+### 6.3 `experimental.session.compacting` — Compact 后恢复
 
 ```typescript
 async onCompacting(input, output) {
-  const sessionID = input.sessionID || "unknown";
-  const scratchpadPath = this.getScratchpadPath(sessionID);
-  const isUserTriggered = !input.auto;
+  const { scratchpadPath, isUserTriggered } = this.getSessionInfo(input);
 
-  let compactWarning: string;
-
-  if (isUserTriggered) {
-    // 用户主动要求 compact → 强烈提醒归档
-    compactWarning = [
-      '---',
-      '⚠️ Context Compaction: USER TRIGGERED',
-      '---',
-      '用户主动要求压缩上下文（`/compact`），这意味着他们想要一个干净的新起点。',
-      `你的当前 scratchpad: ${scratchpadPath}`,
-      '',
-      '**请立即回顾你的 scratchpad，把所有有价值的理解写入 Memory.md。**',
-      '因为用户明确想要结束当前对话，这次 session 的心境和理解如果不归档，将永远丢失。',
-      '',
-      '归档检查清单：',
-      '1. 【关键决策】→ 写入对应项目的 decisions.md',
-      '2. 【新洞察】→ 写入对应主题的 memory 文件',
-      '3. 【用户偏好】→ 更新 memory/meta/user-preferences.md',
-      '4. 【项目状态】→ 更新对应项目的 SUMMARY.md',
-      '',
-      '不需要专用工具，直接读写 `~/.opencode/soul/memory/` 下的文件即可。',
-      '如果不确定某个内容是否值得归档，**保守起见先归档**。',
-    ].join('\n');
-  } else {
-    // 自动 compact → 温和提醒，不要求归档
-    compactWarning = [
-      '---',
-      'Context Compaction Warning',
-      '---',
-      '你的对话上下文即将被自动压缩/摘要化。',
-      `你的当前 scratchpad: ${scratchpadPath}`,
-      '',
-      '压缩后，详细的对话历史将丢失，只保留结构化摘要。',
-      '时间宝贵，请**快速追加 1-2 条最重要的理解到 Scratchpad**（不要归档到 Memory.md）。',
-      '等到 session 真正结束时，再把累积的理解选择性归档。',
-    ].join('\n');
-  }
+  const recoveryPrompt = isUserTriggered
+    ? [
+        '---',
+        '⚠️ COMPACT COMPLETED (User Triggered)',
+        '---',
+        '上下文已压缩。详细对话丢失，只剩摘要。',
+        `你的 scratchpad: ${scratchpadPath}`,
+        '',
+        '【立即】读取 scratchpad 找回认知：',
+        '→ scratch_read 最近的 slot',
+        '→ 确认 pre-compact 归档是否完成',
+        '→ 带着理解继续工作',
+        '',
+        '不要基于摘要硬撑——找回你之前的思路和待办。',
+      ].join('\n')
+    : [
+        '---',
+        '⚠️ COMPACT COMPLETED (Auto)',
+        '---',
+        '上下文已自动压缩。详细对话丢失。',
+        `你的 scratchpad: ${scratchpadPath}`,
+        '',
+        '【建议】快速读取找回思路：',
+        '→ scratch_read 最近的待办和理解',
+        '→ 确认进度后继续工作',
+      ].join('\n');
 
   output.context = output.context || [];
-  output.context.push(compactWarning);
+  output.context.push(recoveryPrompt);
 }
 ```
 
-**关键变化**：
-- **自动 compact**：只要求"快速追加到 Scratchpad"，不要求归档到 Memory.md
-- **用户主动 compact**：强烈提醒归档，允许花 1-2 个 tool call 写入 Memory.md
-- **原因**：自动 compact 时上下文即将丢失，不应占用 tool call 做复杂整理
+**关键职责**：
+- **pre-compact**：负责"归档"——在压缩前分流热数据/冷数据（唯一归档时机）
+- **compacting**：负责"恢复"——在压缩后提醒 AI 读取 scratchpad 找回认知
+- **两者关系**：不是降级备份，而是连续流程——先归档，后恢复
 
 ---
 
@@ -987,7 +981,7 @@ async onCompacting(input, output) {
 | 与 ACP/OpenCode Compact 冲突 | 低 | 高 | 三层分工明确；pre-compact 分流避免重复整理 |
 | Hook API 变动 | 中 | 中 | 关注 opencode 更新，使用稳定的 hook |
 | 用户误删 SOUL.md | 低 | 中 | 提供备份/恢复命令；DEFAULT_SOUL_TEMPLATE 可重新创建 |
-| Pre-compact 失败导致数据丢失 | 低 | 高 | Pre-compact 失败不阻塞 compact；onCompacting 降级提醒 |
+| Pre-compact 失败导致数据丢失 | 低 | 高 | Pre-compact 失败不阻塞 compact；onCompacting 事后提醒恢复 |
 | SOUL.md 过长导致 system prompt 膨胀 | 低 | 中 | SOUL.md 中注明"保持精简"；AI 自己控制 |
 | 自动 compact 时 AI 浪费 tool call 整理 | 低 | 中 | 提示词限制 tool call 数量；优先保留热数据到 Scratchpad |
 

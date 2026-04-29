@@ -72,18 +72,11 @@ export class SoulManager {
       "",
       "## Memory System",
       "",
-      "### 客观知识层（Memory.md）",
-      "长期知识存储在 `~/.opencode/soul/memory/`。",
-      "直接读写文件即可。链接格式由你自行约定。",
+      `Scratchpad: ${scratchpadPath}`,
+      "Memory: ~/.opencode/soul/memory/",
       "",
-      "### 理解层（Scratchpad）",
-      `当前 session 的 scratchpad: ${scratchpadPath}`,
-      "使用 `scratch_write` 记录你对 Memory.md 的阅读理解。",
-      "**关键：不要复制原文，写下\"这次阅读对你当前任务的意义\"**.",
-      "",
-      "### 归档",
-      "不需要专用工具，直接读写 `~/.opencode/soul/memory/` 即可。",
-      "Session 结束前，特别是收到 compact 提醒时，请把有价值的理解写入 Memory.md。",
+      "使用 scratch_* 工具写理解，直接读写文件归档。",
+      "不要复制原文，写'这次阅读对我当前任务的意义'。",
     ].join("\n")
 
     if (Array.isArray(output.system)) {
@@ -116,36 +109,19 @@ export class SoulManager {
       "---",
       isUserTriggered ? "⚠️ PRE-COMPACT: USER TRIGGERED" : "⚠️ PRE-COMPACT: AUTO",
       "---",
+      "上下文即将压缩。详细对话历史将丢失。",
+      `当前 scratchpad: ${scratchpadPath}`,
+      "",
+      "【唯一归档时机】压缩后无法补救。立即分流：",
+      "- 热数据（活跃思路、待办、未完成假设）→ scratch_write 追加到 scratchpad",
+      "- 冷数据（已验证决策、项目知识、用户偏好）→ 直接 write/edit 到 memory/",
+      "",
+      "原理：Scratchpad 保留主观理解（认知备份），Memory 沉淀客观知识。",
+      "compact 后对话丢失，但 scratchpad 和 memory 文件保留，确保认知延续。",
+      "",
       isUserTriggered
-        ? "用户主动要求压缩上下文（`/compact`），想要一个干净的新起点。"
-        : "上下文即将自动压缩。",
-      `你的当前 scratchpad: ${scratchpadPath}`,
-      "",
-      "【任务】分流整理：热数据 → Scratchpad，冷数据 → Memory.md",
-      "【权限】完整工具访问（write/edit/scratch_write/scratch_delete）",
-      "",
-      "热数据（活跃状态，保留在 Scratchpad）：",
-      "- 当前正在进行的思路链（还未得出结论）",
-      "- 待办事项（todo）和未完成的假设",
-      "- 临时草稿和探索性想法",
-      "- 需要用 scratch_write 追加到 scratchpad",
-      "",
-      "冷数据（已完成，写入 Memory.md）：",
-      "- 已验证的关键决策 → memory/projects/*/decisions.md",
-      "- 结构化的项目知识 → memory/projects/**/*.md",
-      "- 用户偏好和约定 → memory/meta/preferences.md",
-      "- 技术洞察和模式 → memory/topics/*.md",
-      "- 客观、中立、充分详实，不依赖当前 context",
-      "",
-      "策略：",
-      "- 优先保留热数据到 Scratchpad（对话继续需要）",
-      "- 冷数据直接 write/edit 到 Memory.md（不先读，基于当前 context 直接写）",
-      "- 已归档的冷数据可以从 scratchpad 删除（scratch_delete）",
-      isUserTriggered
-        ? "- 这是 session 结束的信号，不要留遗漏"
-        : "- 时间宝贵，快速处理，1-2 个 tool call",
-      "",
-      "完成后 context 将被压缩。",
+        ? "用户主动要求 clean start → 完整归档，不要遗漏任何理解。"
+        : "自动触发 → 优先保留热数据，限制 1-2 个 tool call。",
     ].join("\n")
 
     output.prompt = basePrompt
@@ -154,35 +130,35 @@ export class SoulManager {
   async onCompacting(input: any, output: any): Promise<void> {
     const { scratchpadPath, isUserTriggered } = this.getSessionInfo(input)
 
-    const compactWarning = isUserTriggered
+    const recoveryPrompt = isUserTriggered
       ? [
           "---",
-          "Context Compaction: Summary Phase (User Triggered)",
+          "⚠️ COMPACT COMPLETED (User Triggered)",
           "---",
-          "用户主动要求压缩上下文（`/compact`）。",
-          `你的当前 scratchpad: ${scratchpadPath}`,
+          "上下文已压缩。详细对话丢失，只剩摘要。",
+          `你的 scratchpad: ${scratchpadPath}`,
           "",
-          "⚠️ 这是降级提醒：Pre-compact hook 可能未触发或失败。",
-          "如果 pre-compact 未执行，请立即：",
-          "→ 基于当前上下文，把关键理解写入 Memory.md",
-          "→ 保留活跃思路到 Scratchpad",
-          "→ 然后生成简洁摘要",
+          "【立即】读取 scratchpad 找回认知：",
+          "→ scratch_read 最近的 slot",
+          "→ 确认 pre-compact 归档是否完成",
+          "→ 带着理解继续工作",
+          "",
+          "不要基于摘要硬撑——找回你之前的思路和待办。",
         ].join("\n")
       : [
           "---",
-          "Context Compaction: Summary Phase (Auto)",
+          "⚠️ COMPACT COMPLETED (Auto)",
           "---",
-          "上下文已自动压缩。",
-          `你的当前 scratchpad: ${scratchpadPath}`,
+          "上下文已自动压缩。详细对话丢失。",
+          `你的 scratchpad: ${scratchpadPath}`,
           "",
-          "⚠️ 这是降级提醒：Pre-compact hook 可能未触发。",
-          "如果 pre-compact 未执行：",
-          "→ 快速检查是否有必须归档的关键决策",
-          "→ 生成摘要，恢复后继续工作",
+          "【建议】快速读取找回思路：",
+          "→ scratch_read 最近的待办和理解",
+          "→ 确认进度后继续工作",
         ].join("\n")
 
     output.context = output.context || []
-    output.context.push(compactWarning)
+    output.context.push(recoveryPrompt)
   }
 
   getTools(): Record<string, any> {
