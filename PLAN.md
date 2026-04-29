@@ -80,8 +80,18 @@ Post-Compact (session 继续):
   13. AI 继续工作：带着之前的理解继续任务
   14. 继续随时用 scratch_write 记录笔记
 
-Session End (真正结束):
-  15. AI 归档：把跨多次 compact 累积的 Scratchpad 理解选择性写入 Memory.md
+Pre-Compact (OpenCode 触发，唯一归档时机):
+  8. 系统提醒：context 即将被压缩/摘要化
+  9. AI 分流整理：
+     - 热数据（活跃 insight、todo、未完成思路）→ Scratchpad（用 scratch_write 追加）
+     - 冷数据（已验证决策、结构化知识、客观事实）→ Memory.md（直接 write/edit）
+  10. 已归档的冷数据可以从 scratchpad 删除（scratch_delete）
+  11. 系统执行：Compact/Prune，丢弃详细对话历史
+
+Post-Compact (session 继续):
+  12. AI 读取 Scratchpad：详细对话已丢失，读回自己的"心境记录"
+  13. AI 继续工作：带着之前的理解继续任务
+  14. 继续随时用 scratch_write 记录笔记
 ```
 
 ### 2.3 Compact 摘要 vs Scratchpad：骨架与血肉
@@ -142,10 +152,11 @@ scratchpad 记录阶段1   scratchpad 追加阶段2    scratchpad 追加阶段3
 
 **所以**：
 - **平时**：随时用 `scratch_write` 记录 lightweight 笔记（1-3 句话）
-- **每次 compact 前**：快速追加 1-2 条最重要的理解（抢救即将丢失的心境）
+- **每次 compact 前（唯一归档时机）**：
+  - 热数据（活跃 insight、todo、草稿）→ 用 `scratch_write` 追加到 Scratchpad
+  - 冷数据（已验证决策、结构化知识）→ 直接 `write`/`edit` 到 Memory.md
 - **每次 compact 后**：应该读取 scratchpad（找回之前的理解）
-- **session 真正结束**：把跨多次 compact 累积的理解选择性归档到 Memory.md
-- **口诀**：平时随手记，Compact 前抢救，Compact 后找回，Session 结束归档
+- **口诀**：平时随手记，Compact 前分流归档，Compact 后找回
 
 ### 2.5 OpenCode Context 组成（调研结论）
 
@@ -211,36 +222,41 @@ OpenCode 有两种 Compact 触发方式：
 **A. 自动 Compact**（`auto: true`）
 - 触发条件：token ≥ (input_limit - reserved)
 - 行为：系统自动生成摘要，替换历史消息
-- Soul Memory 响应：
-  - 在 hook 中温和提醒 AI 检查 scratchpad
-  - **不要求此时归档到 Memory.md**（时间宝贵，上下文即将丢失）
-  - 只要求快速追加 1-2 条最重要的理解到 Scratchpad
+- Soul Memory 响应（Pre-compact hook）：
+  - 触发 `experimental.session.pre-compact`
+  - AI 获得完整工具访问权限
+  - **分流整理**：
+    - 热数据 → 追加到 Scratchpad（活跃 insight、todo、未完成思路）
+    - 冷数据 → 写入 Memory.md（关键决策、用户偏好、项目状态）
+  - 限制 tool call 数量（上下文即将丢失，时间宝贵）
 
 **B. 用户主动 Compact**（`/compact` 或 `,c`，`auto: false`）
 - 触发条件：用户明确输入 `/compact`
 - 行为：用户想要一个"干净的新起点"
-- Soul Memory 响应：
-  - 在 hook 中**强烈**提醒 AI 归档
-  - 允许花 1-2 个 tool call 把关键理解写入 Memory.md
-  - 优先写入：关键决策、用户偏好、项目状态
-  - 临时想法可以直接丢弃
+- Soul Memory 响应（Pre-compact hook）：
+  - 同样触发 `experimental.session.pre-compact`
+  - 允许更完整的归档（更多 tool call）
+  - 不要遗漏任何有价值的理解
+  - 归档完成后可以 scratch_delete 清理已转存的条目
 
 ```typescript
-async onCompacting(input, output) {
+async onPreCompact(input, output) {
   const isUserTriggered = !input.auto;
-
+  output.shouldRun = true;
+  
   if (isUserTriggered) {
-    output.context.push(userTriggeredCompactWarning);
+    output.prompt = userTriggeredPreCompactPrompt;
   } else {
-    output.context.push(autoCompactWarning);
+    output.prompt = autoPreCompactPrompt;
   }
 }
 ```
 
-**关键设计变化**：
-- **自动 compact 时不强制归档到 Memory.md**——避免在 context 即将丢失时占用宝贵的 tool call
-- **用户主动 compact 时强烈提醒归档**——因为这是"session 结束"的信号
-- **平时鼓励随时写 Scratchpad**——不要等到 compact 才写
+**关键设计**：
+- **Pre-compact 是唯一归档时机**：一旦 compact 完成，详细对话丢失，没有第二次机会
+- **自动 compact 时快速处理**：优先保留热数据到 Scratchpad，冷数据选择性写入 Memory.md
+- **用户主动 compact 时完整归档**：用户明确想要"干净起点"，不应遗漏
+- **onCompacting 降级为辅助**：在原 hook 中提醒 AI"pre-compact 应该已完成"，作为备份机制
 
 ### 3.3 与 opencode-rules 的区别
 
@@ -367,22 +383,25 @@ AI 自选 wiki-link 格式，不强制解析。常见选择：
 - **Session 真正结束**：把跨多次 compact 累积的 scratchpad 理解选择性归档到 Memory.md
 - **口诀：平时随手记，Compact 前抢救，Compact 后找回，Session 结束归档**
 
-### Compact 时的具体操作
+### Pre-Compact 分流归档（唯一归档时机）
 
 **自动 Compact**（系统触发）：
-- 不要执行复杂整理！上下文即将被压缩，时间宝贵
-- 快速追加 1-2 条最重要的理解到 Scratchpad
-- 不要归档到 Memory.md（等 session 结束再归档）
+- 上下文即将被压缩，时间宝贵
+- **热数据**：活跃 insight、todo、未完成思路 → `scratch_write` 追加到 Scratchpad
+- **冷数据**：只归档最关键 1-2 项（关键决策、用户偏好）→ 直接 `write`/`edit` 到 Memory.md
+- 限制 tool call 数量
 
 **用户主动 `/compact`**（用户想要干净起点）：
-- 这是归档的好时机，但仍要简洁
-- 花 1-2 个 tool call 把关键理解写入 Memory.md
-- 优先写入：关键决策、用户偏好、项目状态
-- 临时想法可以直接丢弃
+- 用户明确想要"干净起点"
+- **热数据**：完整保留到 Scratchpad（不要遗漏活跃思路）
+- **冷数据**：完整归档到 Memory.md（关键决策、项目知识、用户偏好、技术洞察）
+- 归档完成后可以 `scratch_delete` 清理已转存的条目
+- 这是唯一一次完整归档的机会
 
 ### 归档方法
 - **不需要专用工具**，直接读写 `~/.opencode/soul/memory/` 下的文件
 - 使用 `read` 读取现有内容，使用 `edit`/`write` 更新
+- 冷数据应客观、结构化、充分详实，不依赖当前 context
 - 保持 Memory.md 的结构清晰，不要堆砌
 
 ### 写作原则
@@ -476,33 +495,6 @@ Scratchpad 采用**自然语言 Markdown + 可选元数据**格式。AI 写纯�
 - `> source: xxx` → 关联的 Memory.md（可选，不强制）
 - 没写 `> type` → 默认 type 为 `note`
 - 格式写乱了 → 返回原始文本给 AI，不报错
-
-**多次 Compact 的追加示例**：
-
-```markdown
-# Scratchpad: session-a1b2
-
-## 阶段1：阅读 architecture.md
-> type: comprehension
-> source: memory/projects/siliconaio/architecture.md
-> compact: 1  # 第一次 compact 前写入
-
-- Agent = Model + Harness
-
-## 阶段2：讨论 memory 系统设计
-> type: insight
-> compact: 2  # 第二次 compact 前写入
-
-- scratchpad 的本质是注意力机制
-- 每朝每代读三国都有不同心境
-
-## 阶段3：用户明确要求 /compact
-> type: todo
-> compact: 3  # 第三次 compact（用户主动）
-
-- [ ] 归档到 memory/meta/cognitive-model.md
-- [ ] 写插件骨架
-```
 
 **注意**：
 - `scratch_write` 默认**追加**到现有 scratchpad（不是覆盖）
@@ -881,9 +873,9 @@ async onCompacting(input, output) {
 
 ### 9.5 为什么区分自动 compact 和用户主动 `/compact`？
 
-- **自动 compact**：系统被迫压缩，AI 可能还在工作中 → 只要求快速追加到 Scratchpad，不要求归档到 Memory.md
-- **用户主动 `/compact`**：用户明确想要"干净的新起点" → 强烈提醒归档，允许花 tool call 写入 Memory.md
-- 原因：自动 compact 时上下文即将丢失，不应占用宝贵的 tool call 做复杂整理
+- **自动 compact**：系统被迫压缩，AI 可能还在工作中 → 限制 tool call 数量，优先保留热数据到 Scratchpad
+- **用户主动 `/compact`**：用户明确想要"干净的新起点" → 允许完整归档，热数据保留 + 冷数据写入 Memory.md
+- 原因：自动 compact 时上下文即将丢失，不应占用过多 tool call；用户主动时则无此顾虑
 
 ### 9.6 为什么没有专用归档工具？
 
@@ -917,9 +909,12 @@ async onCompacting(input, output) {
 
 - **物理层面**：scratchpad 是文件系统上的文件，compact 不碰它
 - **认知层面**：compact 后详细对话丢失，scratchpad 成了"心境记录"的唯一载体
-- **使用模式**：compact 前追加写入（抢救），compact 后读取（找回），session 结束归档（固化）
-- **多次 compact**：一个长 session 可能经历多次 compact，scratchpad 追加式记录每个阶段
+- **使用模式**：
+  - **Pre-compact 前**：分流整理，热数据保留到 Scratchpad，冷数据写入 Memory.md
+  - **Compact 后**：读取 Scratchpad，找回之前的心境
+- **多次 compact**：一个长 session 可能经历多次 compact，每次 pre-compact 都分流归档
 - **避免失忆**：如果没有 scratchpad，compact 后 AI 只能基于摘要继续工作，等于"失忆后硬撑"
+- **关键**：Pre-compact 是**唯一归档时机**，compact 后没有第二次机会
 
 ### 9.11 为什么 SOUL.md 注入在 system prompt 末尾？
 
@@ -988,13 +983,13 @@ async onCompacting(input, output) {
 |------|------|------|------|
 | AI 不主动阅读 Memory.md | 中 | 高 | SOUL.md 中强烈引导；工具描述强调"阅读生成理解" |
 | AI 在 Scratchpad 中复制原文 | 中 | 中 | System prompt 明确引导"写读后感而非摘抄"；强调 lightweight |
-| Scratchpad 文件膨胀 | 低 | 中 | Session 结束后 AI 自主清理；定期提醒整理；lightweight 原则 |
-| 与 ACP/OpenCode Compact 冲突 | 低 | 高 | 三层分工明确；自动 compact 时不占用 tool call |
+| Scratchpad 文件膨胀 | 低 | 中 | Pre-compact 时清理已归档的冷数据（scratch_delete）；lightweight 原则 |
+| 与 ACP/OpenCode Compact 冲突 | 低 | 高 | 三层分工明确；pre-compact 分流避免重复整理 |
 | Hook API 变动 | 中 | 中 | 关注 opencode 更新，使用稳定的 hook |
 | 用户误删 SOUL.md | 低 | 中 | 提供备份/恢复命令；DEFAULT_SOUL_TEMPLATE 可重新创建 |
-| 用户 `/compact` 后 AI 未归档 | 中 | 高 | 用户主动 compact 时强烈提醒；归档检查清单 |
+| Pre-compact 失败导致数据丢失 | 低 | 高 | Pre-compact 失败不阻塞 compact；onCompacting 降级提醒 |
 | SOUL.md 过长导致 system prompt 膨胀 | 低 | 中 | SOUL.md 中注明"保持精简"；AI 自己控制 |
-| 自动 compact 时 AI 浪费 tool call 整理 | 低 | 中 | 提示词明确"自动 compact 时只追加 Scratchpad，不归档 Memory.md" |
+| 自动 compact 时 AI 浪费 tool call 整理 | 低 | 中 | 提示词限制 tool call 数量；优先保留热数据到 Scratchpad |
 
 ---
 

@@ -112,46 +112,43 @@ export class SoulManager {
 
     output.shouldRun = true
 
-    if (isUserTriggered) {
-      output.prompt = [
-        "---",
-        "⚠️ PRE-COMPACT: USER TRIGGERED",
-        "---",
-        "用户主动要求压缩上下文（`/compact`），想要一个干净的新起点。",
-        `你的当前 scratchpad: ${scratchpadPath}`,
-        "",
-        "【任务】完整归档所有关键理解到 Memory.md",
-        "【权限】完整工具访问（write/edit/scratch_write/scratch_delete）",
-        "【策略】",
-        "- 这是 session 结束的信号，不要留遗漏",
-        "- 直接基于当前上下文 write/edit，不需要先读取 scratchpad",
-        "- 关键决策 → memory/projects/*/decisions.md",
-        "- 新洞察 → memory/topics/*.md",
-        "- 用户偏好 → memory/meta/preferences.md",
-        "- 项目状态 → memory/projects/*/STATUS.md",
-        "- 归档完成后可以 scratch_delete 清理",
-        "",
-        "完成后 context 将被压缩。",
-      ].join("\n")
-    } else {
-      output.prompt = [
-        "---",
-        "⚠️ PRE-COMPACT: AUTO",
-        "---",
-        "上下文即将自动压缩。",
-        `你的当前 scratchpad: ${scratchpadPath}`,
-        "",
-        "【任务】快速归档最关键的 1-2 项理解",
-        "【权限】完整工具访问",
-        "【策略】",
-        "- 只归档最重要的：关键决策或用户明确说过的偏好",
-        "- 不需要完整整理，快速 write 即可",
-        "- 临时想法可以忽略",
-        "- 时间宝贵，1-2 个 tool call 完成",
-        "",
-        "完成后 context 将被压缩，对话继续。",
-      ].join("\n")
-    }
+    const basePrompt = [
+      "---",
+      isUserTriggered ? "⚠️ PRE-COMPACT: USER TRIGGERED" : "⚠️ PRE-COMPACT: AUTO",
+      "---",
+      isUserTriggered
+        ? "用户主动要求压缩上下文（`/compact`），想要一个干净的新起点。"
+        : "上下文即将自动压缩。",
+      `你的当前 scratchpad: ${scratchpadPath}`,
+      "",
+      "【任务】分流整理：热数据 → Scratchpad，冷数据 → Memory.md",
+      "【权限】完整工具访问（write/edit/scratch_write/scratch_delete）",
+      "",
+      "热数据（活跃状态，保留在 Scratchpad）：",
+      "- 当前正在进行的思路链（还未得出结论）",
+      "- 待办事项（todo）和未完成的假设",
+      "- 临时草稿和探索性想法",
+      "- 需要用 scratch_write 追加到 scratchpad",
+      "",
+      "冷数据（已完成，写入 Memory.md）：",
+      "- 已验证的关键决策 → memory/projects/*/decisions.md",
+      "- 结构化的项目知识 → memory/projects/**/*.md",
+      "- 用户偏好和约定 → memory/meta/preferences.md",
+      "- 技术洞察和模式 → memory/topics/*.md",
+      "- 客观、中立、充分详实，不依赖当前 context",
+      "",
+      "策略：",
+      "- 优先保留热数据到 Scratchpad（对话继续需要）",
+      "- 冷数据直接 write/edit 到 Memory.md（不先读，基于当前 context 直接写）",
+      "- 已归档的冷数据可以从 scratchpad 删除（scratch_delete）",
+      isUserTriggered
+        ? "- 这是 session 结束的信号，不要留遗漏"
+        : "- 时间宝贵，快速处理，1-2 个 tool call",
+      "",
+      "完成后 context 将被压缩。",
+    ].join("\n")
+
+    output.prompt = basePrompt
   }
 
   async onCompacting(input: any, output: any): Promise<void> {
@@ -165,10 +162,11 @@ export class SoulManager {
           "用户主动要求压缩上下文（`/compact`）。",
           `你的当前 scratchpad: ${scratchpadPath}`,
           "",
-          "Pre-compact 归档应该已完成。",
-          "→ 请生成简洁摘要",
-          "→ 已归档的内容不需要重复",
-          "→ 只需记录未归档的关键信息",
+          "⚠️ 这是降级提醒：Pre-compact hook 可能未触发或失败。",
+          "如果 pre-compact 未执行，请立即：",
+          "→ 基于当前上下文，把关键理解写入 Memory.md",
+          "→ 保留活跃思路到 Scratchpad",
+          "→ 然后生成简洁摘要",
         ].join("\n")
       : [
           "---",
@@ -177,9 +175,10 @@ export class SoulManager {
           "上下文已自动压缩。",
           `你的当前 scratchpad: ${scratchpadPath}`,
           "",
-          "Pre-compact 快速归档应该已完成。",
-          "→ 请生成摘要，确保已归档的关键内容有引用",
-          "→ 恢复后可以继续工作",
+          "⚠️ 这是降级提醒：Pre-compact hook 可能未触发。",
+          "如果 pre-compact 未执行：",
+          "→ 快速检查是否有必须归档的关键决策",
+          "→ 生成摘要，恢复后继续工作",
         ].join("\n")
 
     output.context = output.context || []
