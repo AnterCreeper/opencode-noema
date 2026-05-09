@@ -83,9 +83,9 @@ Session 开始:
   7. 遇到新信息 → 判断是否需要更新 Memory.md
 
 Pre-Compact（压缩前）:
-  8. `experimental.session.pre-compact` hook 触发
+  8. `experimental.session.compacting` hook 触发
   9. 用户主动 `/compact` → 完整归档关键理解到 Memory.md（完整工具访问）
-  10. 自动 compact → 快速抢救 1-2 项最关键理解到 Memory.md
+  10. 自动 compact → 快速抢救 1-2 项最关键理解到 Scratchpad
 
 Compact 后:
   11. 系统生成摘要，AI 基于已归档内容恢复工作
@@ -103,6 +103,12 @@ Session 结束:
 > 每次 AI 阅读 Memory.md，都带着当前的 SOUL（价值观）和 Context（心境）。同一文本在不同心境下产生不同理解。Scratchpad 记录的不是"原文说了什么"，而是"这次阅读对我意味着什么"。
 
 这就是**注意力机制在认知层面的体现**。
+
+### 体系结构视角
+
+三层认知存储映射为计算机存储层次：**Context（Cache）→ Scratchpad（DRAM）→ Memory.md（SSD）**。分级的根本依据是**频率 × 生命周期 × 容量**，不是内容/角色/任务。
+
+详见 [PLAN.md](./PLAN.md)。
 
 ### 遗忘即筛选
 
@@ -133,14 +139,16 @@ Session 结束:
 ```
 ~/.opencode/
 ├── soul/
-│   ├── SOUL.md              # 阅读滤镜/身份层（AI 自治）
-│   └── memory/              # 客观知识层（AI 自治）
+│   ├── SOUL.md              # 阅读滤镜/身份层（AI 自治）→ 类比：MMU/页表配置
+│   └── memory/              # 客观知识层（AI 自治）→ 类比：SSD 持久存储
 │       ├── README.md        # 归档规范
 │       ├── index.md         # 记忆总索引
 │       └── (AI 自行创建)
-└── .scratchpad/             # 主观理解层（按 session 隔离）
+└── .scratchpad/             # 主观理解层（按 session 隔离）→ 类比：DRAM 工作内存
     └── {sessionID}.md       # 当前 session 的心境记录
 ```
+
+**体系结构映射**：SOUL.md（页表配置）→ memory/（SSD）→ .scratchpad/（DRAM）→ Context（Cache）。频率递减，生命周期递增。
 
 ---
 
@@ -161,4 +169,4 @@ Session 结束:
 
 ---
 
-*版本：v0.1.0 | 日期：2026-04-29*
+*版本：v2.0 | 日期：2026-05-09*

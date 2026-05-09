@@ -105,24 +105,38 @@ export class SoulManager {
 
     output.shouldRun = true
 
-    const basePrompt = [
-      "---",
-      isUserTriggered ? "⚠️ PRE-COMPACT: USER TRIGGERED" : "⚠️ PRE-COMPACT: AUTO",
-      "---",
-      "上下文即将压缩。详细对话历史将丢失。",
-      `当前 scratchpad: ${scratchpadPath}`,
-      "",
-      "【唯一归档时机】压缩后无法补救。立即分流：",
-      "- 热数据（活跃思路、待办、未完成假设）→ scratch_write 追加到 scratchpad",
-      "- 冷数据（已验证决策、项目知识、用户偏好）→ 直接 write/edit 到 memory/",
-      "",
-      "原理：Scratchpad 保留主观理解（认知备份），Memory 沉淀客观知识。",
-      "compact 后对话丢失，但 scratchpad 和 memory 文件保留，确保认知延续。",
-      "",
-      isUserTriggered
-        ? "用户主动要求 clean start → 完整归档，不要遗漏任何理解。"
-        : "自动触发 → 优先保留热数据，限制 1-2 个 tool call。",
-    ].join("\n")
+    const basePrompt = isUserTriggered
+      ? [
+          "---",
+          "⚠️ PRE-COMPACT: USER TRIGGERED",
+          "---",
+          "上下文即将压缩。用户要求 clean start。",
+          `Scratchpad: ${scratchpadPath}`,
+          "",
+          "【完整归档】系统允许完整 tool call。请完整分流：",
+          "- 🔥 热数据（活跃思路、待办、未完成假设）→ scratch_write 追加到 scratchpad",
+          "- ❄️ 冷数据（已验证决策、项目知识、用户偏好、技术洞察）→ write/edit 到 memory/",
+          "- 🗑️ 临时草稿、已失效信息 → 丢弃（不执行任何操作）",
+          "",
+          "完成后如 scratchpad 条目已转存 memory/，可 scratch_delete 清理。",
+          "不要遗漏——这是你唯一一次完整归档的机会。",
+        ].join("\n")
+      : [
+          "---",
+          "⚠️ PRE-COMPACT: AUTO",
+          "---",
+          "上下文即将压缩。详细对话历史将丢失。",
+          `Scratchpad: ${scratchpadPath}`,
+          "",
+          "【紧急抢救】只有 1-2 个 tool call。不要贪心：",
+          "",
+          "优先级（只做最高优先级的 1-2 项）：",
+          "P0: 未完成待办或关键假设 → scratch_write（必须保留）",
+          "P1: 已验证的重要决策/知识 → 如时间够，write/edit 到 memory/",
+          "P2: 其他理解 → 可丢弃（遗忘是 feature，不是 bug）",
+          "",
+          "原则：热数据保命，冷数据随缘。",
+        ].join("\n")
 
     output.prompt = basePrompt
   }
@@ -135,15 +149,15 @@ export class SoulManager {
           "---",
           "⚠️ COMPACT COMPLETED (User Triggered)",
           "---",
-          "上下文已压缩。详细对话丢失，只剩摘要。",
+          "用户主动要求 clean start，上下文已压缩。",
           `你的 scratchpad: ${scratchpadPath}`,
           "",
-          "【立即】读取 scratchpad 找回认知：",
-          "→ scratch_read 最近的 slot",
-          "→ 确认 pre-compact 归档是否完成",
-          "→ 带着理解继续工作",
+          "【必须执行】你在 pre-compact 阶段做了完整归档投资。现在需要：",
+          "1. scratch_read 读取最近的 slot，验证归档是否完整",
+          "2. 确认 memory/ 中的冷数据是否已成功写入",
+          "3. 带着完整理解继续工作——不要基于摘要硬撑",
           "",
-          "不要基于摘要硬撑——找回你之前的思路和待办。",
+          "用户花了精力做 clean start，如果你不按归档继续，这次 compact 就白做了。",
         ].join("\n")
       : [
           "---",
@@ -152,9 +166,11 @@ export class SoulManager {
           "上下文已自动压缩。详细对话丢失。",
           `你的 scratchpad: ${scratchpadPath}`,
           "",
-          "【建议】快速读取找回思路：",
-          "→ scratch_read 最近的待办和理解",
-          "→ 确认进度后继续工作",
+          "【按需执行】你在 pre-compact 阶段只抢救了热数据。现在：",
+          "- 如果当前任务依赖之前理解 → scratch_read 最近的待办/假设",
+          "- 如果当前任务可以独立继续 → 基于摘要直接工作，不要浪费时间",
+          "",
+          "自动 compact 是系统被迫压缩，不要过度找回——确认关键信息即可。",
         ].join("\n")
 
     output.context = output.context || []
@@ -237,7 +253,7 @@ export class SoulManager {
             .map(
               (s: any) =>
                 `- [${s.type || "note"}] ${s.title}${
-                  s.source ? ` (source: ${s.source})` : ""
+                  s.source ? ` (source: ${s.source})` : " [no source]"
                 }`
             )
             .join("\n")
@@ -251,8 +267,17 @@ export class SoulManager {
         },
         execute: async (args: any, context: any) => {
           const manager = this.getManagerFromContext(context)
+
+          const beforeSlots = await manager.list()
+          const beforeCount = beforeSlots.length
+
           await manager.deleteSection(args.section)
-          return `已删除 section: ${args.section}`
+
+          const afterSlots = await manager.list()
+          const afterCount = afterSlots.length
+          const deletedCount = beforeCount - afterCount
+
+          return `已删除 ${deletedCount} 个 section（匹配"${args.section}"），剩余 ${afterCount} 个`
         },
       }),
 

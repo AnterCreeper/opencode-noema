@@ -120,7 +120,10 @@ export class ScratchpadManager {
     )
 
     if (matches.length === 0) return ""
-    return matches.map((m) => m.raw).join("\n")
+    if (matches.length === 1) return matches[0].raw
+
+    // 多匹配时分隔显示
+    return matches.map((m) => m.raw).join("\n\n---\n\n")
   }
 
   async list(filter?: {
