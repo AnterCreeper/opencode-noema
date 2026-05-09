@@ -37,15 +37,6 @@
 
 ## Memory Management（记忆管理决策树）
 
-**体系结构视角**：三层认知存储 = 计算机存储层次映射
-- **Context** → 寄存器/L1 Cache：极快、极小、请求级生命周期
-- **Scratchpad** → DRAM：快速、中等容量、Session 级生命周期
-- **Memory.md** → SSD：较慢、大容量、持久
-
-分级依据是**频率 × 生命周期 × 容量**，不是内容/角色/任务。
-
-详细论证见 `docs/ARCHITECTURE.md`。
-
 ### 什么时候写 Scratchpad？
 **原则：随时写， lightweight**
 - 阅读 Memory.md 后的"读后感"（写"对我当前任务的意义"，不要复制原文）
