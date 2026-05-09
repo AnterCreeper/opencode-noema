@@ -218,12 +218,12 @@ OpenCode 生态中有三个系统在不同层面管理 Context：
 ### 7.2 与 opencode-rules 的区别
 
 - opencode-rules：**人类写规则，系统按条件注入**（静态、被动）
-- opencode-soul：**AI 自己阅读记忆，自主生成理解**（动态、主动）
+- opencode-noema：**AI 自己阅读记忆，自主生成理解**（动态、主动）
 
 ### 7.3 与 opencode-mem 的区别
 
 - opencode-mem：**向量搜索词条库**，AI 被动接收搜索结果
-- opencode-soul：**网状文档系统**，AI 主动阅读、生成理解、链接关联
+- opencode-noema：**网状文档系统**，AI 主动阅读、生成理解、链接关联
 
 ---
 
