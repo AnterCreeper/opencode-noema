@@ -19,7 +19,7 @@ export class SoulManager {
 
   async initialize(): Promise<void> {
     await ensureDir(MEMORY_DIR)
-    await ensureDir(SOUL_FILE.replace("/SOUL.md", ""))
+    await ensureDir(path.dirname(SOUL_FILE))
 
     // 创建 SOUL.md（如果不存在）
     const soulExists = await readFileSafe(SOUL_FILE)
@@ -65,14 +65,12 @@ export class SoulManager {
       await manager.clear()
     }
     
-    const scratchpadPath = manager.path
-
     const injection = [
       soulContent,
       "",
       "## Memory System",
       "",
-      `Scratchpad: ${scratchpadPath}`,
+      `Scratchpad: ${manager.path}`,
       "Memory: ~/.opencode/soul/memory/",
       "",
       "使用 scratch_* 工具写理解，直接读写文件归档。",
@@ -93,15 +91,14 @@ export class SoulManager {
     return this.getScratchpadManager(sessionID)
   }
 
-  private getSessionInfo(input: any): { sessionID: string; scratchpadPath: string; isUserTriggered: boolean } {
-    const sessionID = input.sessionID || "unknown"
-    const scratchpadPath = this.getScratchpadManager(sessionID).path
-    const isUserTriggered = !input.auto
-    return { sessionID, scratchpadPath, isUserTriggered }
+  private isUserTriggered(input: any): boolean {
+    return !input.auto
   }
 
   async onPreCompact(input: any, output: any): Promise<void> {
-    const { scratchpadPath, isUserTriggered } = this.getSessionInfo(input)
+    const manager = this.getManagerFromContext(input)
+    const scratchpadPath = manager.path
+    const isUserTriggered = this.isUserTriggered(input)
 
     output.shouldRun = true
 
@@ -142,7 +139,9 @@ export class SoulManager {
   }
 
   async onCompacting(input: any, output: any): Promise<void> {
-    const { scratchpadPath, isUserTriggered } = this.getSessionInfo(input)
+    const manager = this.getManagerFromContext(input)
+    const scratchpadPath = manager.path
+    const isUserTriggered = this.isUserTriggered(input)
 
     const recoveryPrompt = isUserTriggered
       ? [

@@ -23,19 +23,14 @@ export function parseScratchpad(content: string): Slot[] {
     // Skip the header section (e.g., "# Scratchpad: session-id")
     if (i === 0 && title.startsWith("# ")) continue
 
-    const typeMatch =
-      section.match(/^>\s*type:\s*(\w+)/m) ||
-      section.match(/type\s*[:=]\s*(\w+)/i)
-
-    const sourceMatch =
-      section.match(/^>\s*source:\s*(.+)/m) ||
-      section.match(/source\s*[:=]\s*(.+)/i)
+    const typeMatch = section.match(/^>\s*type:\s*(\w+)/m)
+    const sourceMatch = section.match(/^>\s*source:\s*(.+)/m)
 
     slots.push({
       title,
       type: typeMatch?.[1]?.toLowerCase(),
       source: sourceMatch?.[1]?.trim(),
-      content: section.replace(/^>.*\n?/gm, "").trim(),
+      content: section.replace(/^>\s*(type|source):.*\n?/gm, "").trim(),
       raw: "## " + section,
     })
   }

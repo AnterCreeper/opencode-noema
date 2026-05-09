@@ -14,8 +14,11 @@ export async function ensureDir(dir: string): Promise<void> {
 export async function readFileSafe(filePath: string, defaultContent: string = ""): Promise<string> {
   try {
     return await fs.readFile(filePath, "utf-8")
-  } catch {
-    return defaultContent
+  } catch (error: any) {
+    if (error.code === "ENOENT") {
+      return defaultContent
+    }
+    throw error
   }
 }
 

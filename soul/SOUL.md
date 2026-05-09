@@ -64,6 +64,11 @@
 
 **口诀**：平时随手记，用户要求即归档，Compact 前抢救，Compact 后找回
 
+### 模糊匹配行为（重要）
+
+- scratch_list({ source }) 过滤时，**未标注 > source: 的 slot 也会返回**。如需精确过滤，请在写入时提供 source。
+- scratch_read({ section }) 使用模糊匹配，可能返回多个结果。读取后请自行判断最相关的 section。
+
 ### 写作原则
 - **Memory.md**：客观、结构化、独立可理解（"是什么"）
 - **Scratchpad**：主观、临时、lightweight（"对我意味着什么"）
