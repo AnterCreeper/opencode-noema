@@ -87,6 +87,10 @@ export class ScratchpadManager {
     type?: string,
     source?: string
   ): Promise<void> {
+    if (!section.trim()) {
+      throw new Error("Section title cannot be empty")
+    }
+
     const existing = await this.read()
 
     const metadata: string[] = []
@@ -107,7 +111,10 @@ export class ScratchpadManager {
 
   async readSection(section: string): Promise<string> {
     const content = await this.read()
-    if (section === "*") return content
+    if (section === "*") {
+      const slots = parseScratchpad(content)
+      return slots.map((s) => s.raw).join("\n")
+    }
 
     const slots = parseScratchpad(content)
     const matches = slots.filter((s) =>

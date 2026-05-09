@@ -1,7 +1,6 @@
 import * as path from "node:path"
 import * as fs from "node:fs/promises"
 import { tool } from "@opencode-ai/plugin"
-import { z } from "zod"
 import { ScratchpadManager } from "./scratchpad.js"
 import {
   SOUL_FILE,
@@ -22,22 +21,25 @@ export class SoulManager {
     await ensureDir(path.dirname(SOUL_FILE))
 
     // 创建 SOUL.md（如果不存在）
-    const soulExists = await readFileSafe(SOUL_FILE)
-    if (!soulExists) {
+    try {
+      await fs.access(SOUL_FILE)
+    } catch {
       await writeFileSafe(SOUL_FILE, DEFAULT_SOUL_TEMPLATE)
     }
 
     // 创建 memory/README.md（如果不存在）
     const readmePath = path.join(MEMORY_DIR, "README.md")
-    const readmeExists = await readFileSafe(readmePath)
-    if (!readmeExists) {
+    try {
+      await fs.access(readmePath)
+    } catch {
       await writeFileSafe(readmePath, MEMORY_README_TEMPLATE)
     }
 
     // 创建 memory/index.md（如果不存在）
     const indexPath = path.join(MEMORY_DIR, "index.md")
-    const indexExists = await readFileSafe(indexPath)
-    if (!indexExists) {
+    try {
+      await fs.access(indexPath)
+    } catch {
       await writeFileSafe(indexPath, MEMORY_INDEX_TEMPLATE)
     }
   }
