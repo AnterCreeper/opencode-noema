@@ -17,7 +17,7 @@ AI 自治认知记忆系统 —— OpenCode 插件。
 
 ## 安装
 
-> 基础能力不依赖 `experimental.session.pre-compact`。当前 `/opt/opencode-fork` 支持该 hook，因此会启用压缩前归档增强。
+> 基础能力不依赖 `experimental.session.pre-compact`。当前 [https://github.com/AnterCreeper/opencode/](https://github.com/AnterCreeper/opencode/) 支持该 hook，因此会启用压缩前归档增强。
 
 ```bash
 # 克隆仓库
