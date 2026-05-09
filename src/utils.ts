@@ -2,10 +2,12 @@ import * as fs from "node:fs/promises"
 import * as path from "node:path"
 import * as os from "node:os"
 
-export const SOUL_DIR = path.join(os.homedir(), ".opencode", "soul")
+const HOME_DIR = process.env.NOEMA_HOME || os.homedir()
+
+export const SOUL_DIR = path.join(HOME_DIR, ".opencode", "soul")
 export const SOUL_FILE = path.join(SOUL_DIR, "SOUL.md")
 export const MEMORY_DIR = path.join(SOUL_DIR, "memory")
-export const SCRATCHPAD_DIR = path.join(os.homedir(), ".opencode", ".scratchpad")
+export const SCRATCHPAD_DIR = path.join(HOME_DIR, ".opencode", ".scratchpad")
 
 export async function ensureDir(dir: string): Promise<void> {
   await fs.mkdir(dir, { recursive: true })
@@ -14,8 +16,8 @@ export async function ensureDir(dir: string): Promise<void> {
 export async function readFileSafe(filePath: string, defaultContent: string = ""): Promise<string> {
   try {
     return await fs.readFile(filePath, "utf-8")
-  } catch (error: any) {
-    if (error.code === "ENOENT") {
+  } catch (error: unknown) {
+    if (isNodeError(error) && error.code === "ENOENT") {
       return defaultContent
     }
     throw error
@@ -27,8 +29,17 @@ export async function writeFileSafe(filePath: string, content: string): Promise<
   await fs.writeFile(filePath, content, "utf-8")
 }
 
+export function sanitizeSessionID(sessionID: string): string {
+  const sanitized = sessionID.replace(/[^a-zA-Z0-9_-]/g, "_")
+  return sanitized || "unknown"
+}
+
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && "code" in error
+}
+
 export function getScratchpadPath(sessionID: string): string {
-  return path.join(SCRATCHPAD_DIR, `${sessionID}.md`)
+  return path.join(SCRATCHPAD_DIR, `${sanitizeSessionID(sessionID)}.md`)
 }
 
 export const MEMORY_README_TEMPLATE = `# Memory 归档规范
@@ -166,11 +177,11 @@ export const DEFAULT_SOUL_TEMPLATE = `# Soul
 
 两者都需要：骨架不倒 + 灵魂不散。只有 Compact 等于失忆后硬撑。
 
-**口诀**：平时随手记，用户要求即归档，Compact 前抢救，Compact 后找回
+**口诀**：平时随手记，用户要求即归档，Compact 前能抢救就抢救，Compact 后找回
 
 ### 模糊匹配行为（重要）
 
-- scratch_list({ source }) 过滤时，**未标注 > source: 的 slot 也会返回**。如需精确过滤，请在写入时提供 source。
+- scratch_list({ source }) 过滤时，只返回已标注且匹配 \"> source:\" 的 slot。
 - scratch_read({ section }) 使用模糊匹配，可能返回多个结果。读取后请自行判断最相关的 section。
 
 ### 写作原则

@@ -63,21 +63,21 @@ SSD         Memory.md       低        持久          大        较高（read/
 
 ```
 context（对话中产生理解）
-  → scratch_write（立即 flush 到 DRAM 层，防 compact 淘汰丢失）
+  → scratch_write（平时主动 flush 到 DRAM 层，防 compact 淘汰丢失）
     → session 结束归档（选择性 page-out 到 SSD 层）
 ```
 
-不存在从 context 直接到 memory.md 的路径。compact 前不写 scratchpad，理解即蒸发。这就是 pre-compact hook 是整个系统最关键机制的原因。
+基础模式不要求 pre-compact：AI 平时主动写 scratchpad，即可跨 compact 保留理解。pre-compact 是增强写回窗口，用来抢救那些尚未来得及写入 scratchpad/memory 的关键信息。
 
 ### 3.4 Compact = 带写回的 Cache Eviction
 
 | 标准 CPU | Noema |
 |----------|-------|
-| 脏数据先写回 DRAM | pre-compact hook：AI flush 活跃理解到 scratchpad |
+| 脏数据先写回 DRAM | 平时 scratch_write；若支持 pre-compact，则压缩前再补一次写回 |
 | 淘汰缓存行 | compact 执行，原始对话历史丢失 |
 | 后续访问从 DRAM 读 | post-compact：AI 从 scratchpad 读回心智状态 |
 
-如果没有 pre-compact hook，compact 就是**无写回的强制淘汰**——理解直接丢失，类比断电丢 DRAM。Noema 之前的 OpenCode 原生 compact 正是如此。
+如果没有 pre-compact hook，系统退化为**需要平时主动写回的缓存**：已经写入 scratchpad/memory 的理解仍可恢复，未写入的上下文细节会随 compact 丢失。
 
 ### 3.5 为什么按内容/角色/任务分级是错误方向
 
@@ -119,7 +119,7 @@ context（对话中产生理解）
 │  L4: Context — 实时层（Short-term Memory）                   │
 │  内容：当前对话历史                                          │
 │  管理：由 OpenCode 原生机制（Compact/Prune） + ACP 管理      │
-│  我们的角色：在 pre-compact hook 中提醒 AI"这次心境下的理解"   │
+│  我们的角色：提供 scratchpad 写回；pre-compact 可作为额外归档窗口 │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -141,20 +141,20 @@ During Task:
   6. 随时用 scratch_write 记录 lightweight 笔记（1-3 句话）
   7. 遇到新信息 → 判断是否需要更新 Memory.md（客观层）
 
-Pre-Compact (OpenCode 触发):
-  8. 系统提醒：context 即将被压缩/摘要化
+Pre-Compact (可选增强):
+  8. 如果宿主触发 pre-compact hook：AI 获得一次额外 assistant turn，可执行 tool
   9. AI 分流整理：
-     - 热数据（活跃 insight、todo、未完成思路）→ Scratchpad
-     - 冷数据（已验证决策、结构化知识）→ Memory.md
-  10. 系统执行：Compact/Prune，丢弃详细对话历史
+     - 热数据（活跃 insight、todo、未完成思路）→ scratch_write 到 Scratchpad
+     - 冷数据（已验证决策、结构化知识）→ write/edit 到 Memory.md
+  10. pre-compact turn 完成后，系统执行 Compact/Prune，丢弃详细对话历史
 
-Post-Compact (session 继续):
-  11. AI 读取 Scratchpad：详细对话已丢失，读回自己的"心境记录"
-  12. AI 继续工作：带着之前的理解继续任务
+Compact 后 (session 继续):
+  11. 系统生成摘要，AI 基于摘要继续对话
+  12. 下一条用户消息到来时，AI 可自主 scratch_read 找回之前的"心境记录"
   13. 继续随时用 scratch_write 记录笔记
 ```
 
-**口诀**：平时随手记，用户要求即归档，Compact 前抢救，Compact 后找回。
+**口诀**：平时随手记，用户要求即归档，Compact 前能抢救就抢救，Compact 后找回。
 
 ---
 
@@ -206,14 +206,14 @@ OpenCode 生态中有三个系统在不同层面管理 Context：
 |------|---------|------|----------|
 | **ACP** | 工具输出（ToolPart） | Prune（裁剪） | 工具输出 token > 40K |
 | **OpenCode 原生** | 对话消息（Message） | Compact（摘要） | Token ≥ (input_limit - reserved) |
-| **Soul Memory** | AI 的理解（Comprehension） | Post-Compact Recovery | `experimental.session.compacting` hook |
+| **Soul Memory** | AI 的理解（Comprehension） | Scratchpad Write-back | 平时 `scratch_*`；可选 `experimental.session.pre-compact` |
 
 **体系结构视角**：
 - **ACP**（工具层 Prune）= **L1 Cache 行替换**——只在工具输出 > 40K 时丢弃整行工具结果，不影响数据语义
 - **OpenCode Compact**（消息层）= **Cache Flush**——把整个对话历史替换为摘要，是上下文生命周期的硬性边界
-- **Soul Memory**（认知层）= **Memory Controller**——在 Cache Flush 前协调写回策略（热数据到 DRAM/Scratchpad，冷数据到 SSD/Memory.md），确保认知连续性
+- **Soul Memory**（认知层）= **Memory Controller**——平时通过 scratchpad 写回理解；若宿主支持 pre-compact，则在 Cache Flush 前补一次写回
 
-**关键洞察**：ACP 和 OpenCode 做的是"**丢东西**"（剪枝、摘要），Soul Memory 做的是"**在丢之前抢救理解**"。三层在不同抽象层工作，互不冲突。
+**关键洞察**：ACP 和 OpenCode 做的是"**丢东西**"（剪枝、摘要），Soul Memory 做的是"**把理解提前写到不会被丢的层**"。三层在不同抽象层工作，互不冲突。
 
 ### 7.2 与 opencode-rules 的区别
 
@@ -268,7 +268,7 @@ sessionID 是 OpenCode 提供的唯一标识，天然不重复。不需要日期
 
 ### 8.10 为什么 Scratchpad 是"跨 Compact 的心智备份"？
 
-**物理层面**：scratchpad 是文件系统上的文件，compact 不碰它。**认知层面**：compact 后详细对话丢失，scratchpad 成了"心境记录"的唯一载体。Pre-compact 是**唯一归档时机**，compact 后没有第二次机会。
+**物理层面**：scratchpad 是文件系统上的文件，compact 不碰它。**认知层面**：compact 后详细对话丢失，scratchpad 成了"心境记录"的持久载体。Pre-compact 不是系统存在的前提，而是压缩前补写回的增强机会。
 
 ### 8.11 为什么 SOUL.md 注入在 system prompt 末尾？
 
@@ -369,7 +369,7 @@ AI 不记得精确的 slot 标题。"那个关于架构的 todo"比"阅读 archi
 | 与 ACP/OpenCode Compact 冲突 | 低 | 高 | 三层分工明确；pre-compact 分流避免重复整理 |
 | Hook API 变动 | 中 | 中 | 关注 opencode 更新，使用稳定的 hook |
 | 用户误删 SOUL.md | 低 | 中 | DEFAULT_SOUL_TEMPLATE 可重新创建 |
-| Pre-compact 失败导致数据丢失 | 低 | 高 | Pre-compact 失败不阻塞 compact；onCompacting 事后提醒恢复 |
+| Pre-compact 失败导致信息缺失 | 中 | 中 | 平时 scratch_write 是 baseline；pre-compact 失败只会丢失尚未写回的上下文细节 |
 | SOUL.md 过长导致 system prompt 膨胀 | 低 | 中 | SOUL.md 中注明"保持精简"；AI 自己控制 |
 
 ---

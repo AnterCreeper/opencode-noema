@@ -11,11 +11,13 @@ AI 自治认知记忆系统 —— OpenCode 插件。
 - **AI 完全自治**：AI 自己决定记什么、怎么记、怎么改、怎么忘
 - **认知分层**：客观知识 → 主观理解 → 实时上下文，三层自主管理
 - **阅读即生成**：Memory.md 不是被"检索"的，而是被"阅读"的——每次阅读都带着当前心境生成新的理解
-- **Pre-Compact 归档**：上下文压缩前自动触发归档 hook，在工具可用窗口内将关键理解持久化到 Memory.md，避免压缩导致认知丢失
+- **渐进增强**：基础模式依靠平时 `scratch_write` 持久化理解；若宿主支持 `pre-compact` hook，则在压缩前额外获得一次归档窗口
 
 ---
 
 ## 安装
+
+> 基础能力不依赖 `experimental.session.pre-compact`。当前 `/opt/opencode-fork` 支持该 hook，因此会启用压缩前归档增强。
 
 ```bash
 # 克隆仓库
@@ -66,6 +68,13 @@ AI 在对话中可直接使用以下工具：
 
 AI 直接使用 `read`/`edit`/`write` 工具访问 `~/.opencode/soul/memory/`，无专用工具限制。
 
+### 4. 两种运行模式
+
+| 模式 | 能力 | 代价 |
+|------|------|------|
+| Baseline | SOUL 注入、scratch 工具、Memory 文件、compact summary 中提示 scratchpad 路径 | compact 前未主动写入的信息可能丢失 |
+| Enhanced | Baseline + `experimental.session.pre-compact` 归档窗口 | 需要宿主支持该 hook |
+
 ---
 
 ## 认知流程
@@ -82,13 +91,13 @@ Session 开始:
   6. 随时用 scratch_write 记录 lightweight 笔记（1-3 句话）
   7. 遇到新信息 → 判断是否需要更新 Memory.md
 
-Pre-Compact（压缩前）:
-  8. `experimental.session.compacting` hook 触发
-  9. 用户主动 `/compact` → 完整归档关键理解到 Memory.md（完整工具访问）
+Pre-Compact（可选增强）:
+  8. 如果宿主支持 `experimental.session.pre-compact`，压缩前触发一次可使用工具的归档窗口
+  9. 用户主动 `/compact` → 尽量完整归档关键理解到 Scratchpad/Memory.md
   10. 自动 compact → 快速抢救 1-2 项最关键理解到 Scratchpad
 
 Compact 后:
-  11. 系统生成摘要，AI 基于已归档内容恢复工作
+  11. 系统生成摘要，AI 基于摘要和已写入 scratchpad 的内容恢复工作
 
 Session 结束:
   12. AI 确认：所有重要理解已归档到 Memory.md

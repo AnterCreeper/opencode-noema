@@ -1,4 +1,3 @@
-import * as fs from "node:fs/promises"
 import { getScratchpadPath, readFileSafe, writeFileSafe } from "./utils.js"
 
 export interface Slot {
@@ -8,6 +7,8 @@ export interface Slot {
   content: string
   raw: string
 }
+
+const INVALID_FIELD = /[\r\n]/
 
 export function parseScratchpad(content: string): Slot[] {
   const slots: Slot[] = []
@@ -49,8 +50,8 @@ export function fuzzyFindSlots(
       if (!typeMatch) return false
     }
 
-    if (filter.source && slot.source) {
-      if (!slot.source.includes(filter.source)) return false
+    if (filter.source) {
+      if (!slot.source?.includes(filter.source)) return false
     }
 
     if (filter.keyword) {
@@ -87,9 +88,10 @@ export class ScratchpadManager {
     type?: string,
     source?: string
   ): Promise<void> {
-    if (!section.trim()) {
-      throw new Error("Section title cannot be empty")
-    }
+    const title = normalizeSectionTitle(section)
+    validateInlineField("Section title", title)
+    if (type) validateInlineField("Section type", type)
+    if (source) validateInlineField("Section source", source)
 
     const existing = await this.read()
 
@@ -98,7 +100,7 @@ export class ScratchpadManager {
     if (source) metadata.push(`> source: ${source}`)
 
     const entry = [
-      `## ${section}`,
+      `## ${title}`,
       ...metadata,
       "",
       content,
@@ -116,9 +118,11 @@ export class ScratchpadManager {
       return slots.map((s) => s.raw).join("\n")
     }
 
+    const query = normalizeSectionTitle(section)
+
     const slots = parseScratchpad(content)
     const matches = slots.filter((s) =>
-      s.title.toLowerCase().includes(section.toLowerCase())
+      s.title.toLowerCase().includes(query.toLowerCase())
     )
 
     if (matches.length === 0) return ""
@@ -141,10 +145,11 @@ export class ScratchpadManager {
   }
 
   async deleteSection(section: string): Promise<void> {
+    const query = normalizeSectionTitle(section)
     const content = await this.read()
     const slots = parseScratchpad(content)
     const remaining = slots.filter(
-      (s) => !s.title.toLowerCase().includes(section.toLowerCase())
+      (s) => !s.title.toLowerCase().includes(query.toLowerCase())
     )
 
     if (remaining.length === 0) {
@@ -162,5 +167,17 @@ export class ScratchpadManager {
       this.path,
       `# Scratchpad: ${this.sessionID}\n\n`
     )
+  }
+}
+
+function normalizeSectionTitle(section: string): string {
+  const title = section.trim()
+  if (!title) throw new Error("Section title cannot be empty")
+  return title
+}
+
+function validateInlineField(name: string, value: string): void {
+  if (INVALID_FIELD.test(value)) {
+    throw new Error(`${name} cannot contain newlines`)
   }
 }

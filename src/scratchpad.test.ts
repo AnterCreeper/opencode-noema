@@ -7,6 +7,7 @@ import {
   fuzzyFindSlots,
   ScratchpadManager,
 } from "../src/scratchpad.js"
+import { getScratchpadPath, sanitizeSessionID } from "../src/utils.js"
 
 describe("Scratchpad", () => {
   const testDir = path.join(os.tmpdir(), "noema-test-" + Date.now())
@@ -78,6 +79,23 @@ describe("Scratchpad", () => {
       expect(result).toHaveLength(1)
       expect(result[0].title).toBe("架构设计")
     })
+
+    it("should filter by source strictly", () => {
+      const slots = [
+        { title: "有来源", source: "memory/test.md", content: "", raw: "" },
+        { title: "无来源", content: "", raw: "" },
+      ]
+      const result = fuzzyFindSlots(slots, { source: "memory" })
+      expect(result).toHaveLength(1)
+      expect(result[0].title).toBe("有来源")
+    })
+  })
+
+  describe("scratchpad paths", () => {
+    it("should sanitize session IDs used in filenames", () => {
+      expect(sanitizeSessionID("../evil/session")).toBe("___evil_session")
+      expect(getScratchpadPath("../evil/session")).not.toContain("../evil/session.md")
+    })
   })
 
   describe("ScratchpadManager", () => {
@@ -95,6 +113,36 @@ describe("Scratchpad", () => {
       expect(content).toContain("## 测试")
       expect(content).toContain("这是内容")
       expect(content).toContain("> type: note")
+    })
+
+    it("should reject empty section queries", async () => {
+      const manager = new ScratchpadManager("test-session")
+      Object.defineProperty(manager, "path", {
+        value: testFile,
+        writable: true,
+        configurable: true,
+      })
+
+      await manager.writeSection("保留", "内容", "note")
+
+      await expect(manager.readSection("")).rejects.toThrow("Section title cannot be empty")
+      await expect(manager.deleteSection("")).rejects.toThrow("Section title cannot be empty")
+
+      const slots = await manager.list()
+      expect(slots).toHaveLength(1)
+    })
+
+    it("should reject section metadata that breaks markdown structure", async () => {
+      const manager = new ScratchpadManager("test-session")
+      Object.defineProperty(manager, "path", {
+        value: testFile,
+        writable: true,
+        configurable: true,
+      })
+
+      await expect(manager.writeSection("bad\ntitle", "内容", "note")).rejects.toThrow("newlines")
+      await expect(manager.writeSection("标题", "内容", "note\nbad")).rejects.toThrow("newlines")
+      await expect(manager.writeSection("标题", "内容", "note", "source\nbad")).rejects.toThrow("newlines")
     })
 
     it("should list slots", async () => {

@@ -1,6 +1,6 @@
 {
   "name": "opencode-noema",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "AI自治认知记忆系统 - OpenCode插件",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -11,18 +11,20 @@
     "test": "vitest",
     "lint": "tsc --noEmit"
   },
-  "keywords": ["opencode", "plugin", "memory", "cognitive"],
+  "keywords": [
+    "opencode",
+    "plugin",
+    "memory",
+    "cognitive"
+  ],
   "author": "",
   "license": "MIT",
   "peerDependencies": {
-    "@opencode-ai/plugin": "^1.14.0"
+    "@opencode-ai/plugin": ">=1.14.30"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
     "typescript": "^5.0.0",
-    "vitest": "^1.0.0"
-  },
-  "dependencies": {
-    "zod": "^3.22.0"
+    "vitest": "^4.1.5"
   }
 }
