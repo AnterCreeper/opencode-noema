@@ -1,6 +1,6 @@
 {
   "name": "opencode-noema",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "AI自治认知记忆系统 - OpenCode插件",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
