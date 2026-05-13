@@ -171,7 +171,7 @@ export class ScratchpadManager {
 }
 
 function normalizeSectionTitle(section: string): string {
-  const title = section.trim()
+  const title = (section ?? "").trim()
   if (!title) throw new Error("Section title cannot be empty")
   return title
 }

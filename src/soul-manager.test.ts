@@ -72,4 +72,22 @@ describe("SoulManager", () => {
     expect(output.context.join("\n")).toContain("session-1.md")
     expect(output.context.join("\n")).toContain("~/.opencode/soul/memory/")
   })
+
+  it("should read all scratchpad content when scratch_read args omit section", async () => {
+    const { SoulManager } = await import("./soul-manager.js")
+    const manager = new SoulManager()
+    const tools = manager.getTools()
+    const context = { sessionID: "session-1" } as any
+
+    await manager.initialize()
+    await tools.scratch_write.execute(
+      { section: "测试", content: "内容", type: "note" },
+      context
+    )
+
+    const result = await tools.scratch_read.execute({}, context)
+
+    expect(result).toContain("## 测试")
+    expect(result).toContain("内容")
+  })
 })

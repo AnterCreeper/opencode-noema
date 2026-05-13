@@ -128,6 +128,10 @@ describe("Scratchpad", () => {
       await expect(manager.readSection("")).rejects.toThrow("Section title cannot be empty")
       await expect(manager.deleteSection("")).rejects.toThrow("Section title cannot be empty")
 
+      // null/undefined should be treated as empty and rejected
+      await expect(manager.readSection(null as any)).rejects.toThrow("Section title cannot be empty")
+      await expect(manager.deleteSection(null as any)).rejects.toThrow("Section title cannot be empty")
+
       const slots = await manager.list()
       expect(slots).toHaveLength(1)
     })

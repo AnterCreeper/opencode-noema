@@ -42,7 +42,7 @@ interface ScratchWriteArgs {
 }
 
 interface ScratchReadArgs {
-  section: string
+  section?: string
 }
 
 interface ScratchListArgs {
@@ -208,7 +208,7 @@ export class SoulManager {
         },
         execute: async (args: ScratchReadArgs, context: ToolContext) => {
           const manager = this.getManagerFromContext(context)
-          const content = await manager.readSection(args.section)
+          const content = await manager.readSection(args.section ?? "*")
           return content || "未找到匹配的内容"
         },
       }),
