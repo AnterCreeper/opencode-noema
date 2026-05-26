@@ -147,7 +147,7 @@ export class SoulManager {
           "上下文即将压缩。这是压缩前额外提供的 tool-enabled 归档窗口。",
           `Scratchpad: ${scratchpadPath}`,
           "",
-          "请快速归档（1-2 个 tool call，完成后系统才执行 compact）：",
+          "请快速归档（优先一次 scratch_write 写入关键信息；必要时先读再写，完成后系统才执行 compact）：",
           "P0: 未完成待办 → scratch_write（必须保留）",
           "P1: 已验证决策 → 如时间够，write/edit 到 memory/",
           "P2: 其他理解 → 可丢弃",
