@@ -26,6 +26,11 @@ describe("SoulManager", () => {
 
   it("should initialize soul and memory files", async () => {
     const { SoulManager } = await import("./soul-manager.js")
+    const {
+      readBundledSoulTemplate,
+      readBundledMemoryReadmeTemplate,
+      readBundledMemoryIndexTemplate,
+    } = await import("./utils.js")
     const manager = new SoulManager()
 
     await manager.initialize()
@@ -33,6 +38,51 @@ describe("SoulManager", () => {
     await expect(fs.access(path.join(home, ".opencode", "soul", "SOUL.md"))).resolves.toBeUndefined()
     await expect(fs.access(path.join(home, ".opencode", "soul", "memory", "README.md"))).resolves.toBeUndefined()
     await expect(fs.access(path.join(home, ".opencode", "soul", "memory", "index.md"))).resolves.toBeUndefined()
+
+    await expect(
+      fs.readFile(path.join(home, ".opencode", "soul", "SOUL.md"), "utf-8")
+    ).resolves.toBe(await readBundledSoulTemplate())
+    await expect(
+      fs.readFile(path.join(home, ".opencode", "soul", "memory", "README.md"), "utf-8")
+    ).resolves.toBe(await readBundledMemoryReadmeTemplate())
+    await expect(
+      fs.readFile(path.join(home, ".opencode", "soul", "memory", "index.md"), "utf-8")
+    ).resolves.toBe(await readBundledMemoryIndexTemplate())
+  })
+
+  it("should read the bundled soul template from the packaged path", async () => {
+    const { PROJECT_SOUL_TEMPLATE_FILE, readBundledSoulTemplate } = await import("./utils.js")
+
+    await expect(fs.access(PROJECT_SOUL_TEMPLATE_FILE)).resolves.toBeUndefined()
+
+    const template = await readBundledSoulTemplate()
+    expect(template).toContain("# SOUL.md")
+    expect(template).toContain("scratch_list({ source })")
+  })
+
+  it("should read bundled memory templates from packaged paths", async () => {
+    const {
+      PROJECT_MEMORY_README_TEMPLATE_FILE,
+      PROJECT_MEMORY_INDEX_TEMPLATE_FILE,
+      readBundledMemoryReadmeTemplate,
+      readBundledMemoryIndexTemplate,
+    } = await import("./utils.js")
+
+    await expect(fs.access(PROJECT_MEMORY_README_TEMPLATE_FILE)).resolves.toBeUndefined()
+    await expect(fs.access(PROJECT_MEMORY_INDEX_TEMPLATE_FILE)).resolves.toBeUndefined()
+
+    const readme = await readBundledMemoryReadmeTemplate()
+    const index = await readBundledMemoryIndexTemplate()
+
+    expect(readme).toContain("# Memory 归档规范")
+    expect(index).toContain("# Memory Index")
+  })
+
+  it("should include runtime template files in published package files", async () => {
+    const packageJson = JSON.parse(await fs.readFile(path.join(process.cwd(), "package.json"), "utf-8"))
+
+    expect(packageJson.files).toContain("dist/")
+    expect(packageJson.files).toContain("soul/")
   })
 
   it("should inject memory system and create session scratchpad", async () => {

@@ -246,7 +246,7 @@
 
 ### 5.5 模糊匹配行为
 
-- `scratch_list({ source })` 过滤时，未标注 `> source:` 的 slot 也会返回。如需精确过滤，请在写入时提供 source。
+- `scratch_list({ source })` 对 `source` 使用严格过滤；未标注 `> source:` 的 slot 不会返回。需要按来源检索时，请在写入时提供 source。
 - `scratch_read({ section })` 使用模糊匹配，可能返回多个结果。读取后自行判断最相关的 section。
 
 ### 5.6 写作原则

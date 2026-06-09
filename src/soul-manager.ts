@@ -5,10 +5,10 @@ import { ScratchpadManager, type Slot } from "./scratchpad.js"
 import {
   SOUL_FILE,
   MEMORY_DIR,
-  DEFAULT_SOUL_TEMPLATE,
-  MEMORY_README_TEMPLATE,
-  MEMORY_INDEX_TEMPLATE,
   readFileSafe,
+  readBundledSoulTemplate,
+  readBundledMemoryReadmeTemplate,
+  readBundledMemoryIndexTemplate,
   writeFileSafe,
   ensureDir,
 } from "./utils.js"
@@ -59,12 +59,16 @@ export class SoulManager {
   private scratchpadManager?: ScratchpadManager
 
   async initialize(): Promise<void> {
+    const bundledSoulTemplate = await readBundledSoulTemplate()
+    const bundledMemoryReadmeTemplate = await readBundledMemoryReadmeTemplate()
+    const bundledMemoryIndexTemplate = await readBundledMemoryIndexTemplate()
+
     await ensureDir(MEMORY_DIR)
     await ensureDir(path.dirname(SOUL_FILE))
 
-    await writeIfMissing(SOUL_FILE, DEFAULT_SOUL_TEMPLATE)
-    await writeIfMissing(path.join(MEMORY_DIR, "README.md"), MEMORY_README_TEMPLATE)
-    await writeIfMissing(path.join(MEMORY_DIR, "index.md"), MEMORY_INDEX_TEMPLATE)
+    await writeIfMissing(SOUL_FILE, bundledSoulTemplate)
+    await writeIfMissing(path.join(MEMORY_DIR, "README.md"), bundledMemoryReadmeTemplate)
+    await writeIfMissing(path.join(MEMORY_DIR, "index.md"), bundledMemoryIndexTemplate)
   }
 
   getScratchpadManager(sessionID: string): ScratchpadManager {
@@ -75,7 +79,7 @@ export class SoulManager {
   }
 
   async readSoulFile(): Promise<string> {
-    return readFileSafe(SOUL_FILE, DEFAULT_SOUL_TEMPLATE)
+    return readFileSafe(SOUL_FILE, await readBundledSoulTemplate())
   }
 
   async onSystemTransform(input: SessionInput, output: SystemTransformOutput): Promise<void> {
@@ -160,8 +164,8 @@ export class SoulManager {
     const manager = this.getManagerFromContext(input)
     const scratchpadPath = manager.path
 
-    // compacting hook 在 pre-compact 之前触发，output.context 会拼接进 summary prompt
-    // summary 生成阶段不能执行 tool，因此只提供位置信息，不命令任何操作
+    // output.context 会拼接进 compact summary prompt。
+    // summary 生成阶段不能执行 tool，因此这里只提供位置信息，不命令任何操作。
     output.context = output.context || []
     output.context.push(
       `Scratchpad: ${scratchpadPath}`,
