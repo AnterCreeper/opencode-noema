@@ -1,3 +1,5 @@
+
+
 # opencode-noema
 
 AI 自治认知记忆系统 —— OpenCode 插件。
@@ -58,7 +60,7 @@ AI 在对话中可直接使用以下工具：
 
 | 工具 | 作用 |
 |------|------|
-| `scratch_write` | 在 scratchpad 中记录理解、想法、待办 |
+| `scratch_write` | 在 scratchpad 中记录理解、想法、待办（支持 `type`: `comprehension`/`todo`/`insight`/`draft`/`note`） |
 | `scratch_read` | 读取当前 scratchpad 全部或指定 section |
 | `scratch_list` | 列出所有 slots，支持按类型/来源/关键词过滤 |
 | `scratch_delete` | 删除指定 section |
